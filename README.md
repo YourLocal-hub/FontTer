@@ -1,4 +1,4 @@
-# ✏️ Font Maker
+# ✏️ FontTer
 
 A browser-based tool to draw characters and export them as a custom `.ttf` font using [opentype.js](https://github.com/opentypejs/opentype.js).
 
