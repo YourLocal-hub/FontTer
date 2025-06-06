@@ -1,21 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Font Maker</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FontTer</title>
   <style>
     body {
       font-family: sans-serif;
-      margin: 0;
-      padding: 1em;
-      background: #f8f8f8;
       text-align: center;
+      padding: 1rem;
+      background: #f4f4f4;
     }
     canvas {
-      border: 1px solid #ccc;
-      background: #fff;
+      border: 1px solid #999;
       touch-action: none;
+      background: #fff;
     }
     select, button {
       padding: 0.5em;
@@ -28,7 +27,7 @@
   </style>
 </head>
 <body>
-  <h1>Font Maker</h1>
+  <h1>🖋️ Font Maker</h1>
   <div class="controls">
     <select id="charSelect"></select>
     <button id="clearBtn">Clear</button>
@@ -41,20 +40,24 @@
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const charSelect = document.getElementById('charSelect');
+    const clearBtn = document.getElementById('clearBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const exportBtn = document.getElementById('exportFontBtn');
+    const glyphs = {};
     let drawing = false;
     let currentChar = 'A';
-    const glyphs = {};
 
-    const charSelect = document.getElementById('charSelect');
+    // Populate character dropdown
     for (let i = 65; i <= 90; i++) charSelect.innerHTML += `<option>${String.fromCharCode(i)}</option>`;
     for (let i = 97; i <= 122; i++) charSelect.innerHTML += `<option>${String.fromCharCode(i)}</option>`;
-
     charSelect.addEventListener('change', () => {
       currentChar = charSelect.value;
       loadGlyph(currentChar);
     });
 
-    canvas.addEventListener('pointerdown', (e) => {
+    // Drawing
+    canvas.addEventListener('pointerdown', e => {
       drawing = true;
       draw(e);
     });
@@ -73,25 +76,23 @@
       ctx.fill();
     }
 
-    document.getElementById('clearBtn').onclick = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    };
-
-    document.getElementById('saveBtn').onclick = () => {
-      glyphs[currentChar] = canvas.toDataURL();
-      alert(`Saved character: ${currentChar}`);
-    };
-
     function loadGlyph(char) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const data = glyphs[char];
-      if (!data) return;
-      const img = new Image();
-      img.onload = () => ctx.drawImage(img, 0, 0);
-      img.src = data;
+      if (glyphs[char]) {
+        const img = new Image();
+        img.src = glyphs[char];
+        img.onload = () => ctx.drawImage(img, 0, 0);
+      }
     }
 
-    document.getElementById('exportFontBtn').onclick = async () => {
+    clearBtn.onclick = () => ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    saveBtn.onclick = () => {
+      glyphs[currentChar] = canvas.toDataURL();
+      alert(`Saved: ${currentChar}`);
+    };
+
+    exportBtn.onclick = () => {
       const font = new opentype.Font({
         familyName: 'CustomFont',
         styleName: 'Regular',
@@ -101,53 +102,60 @@
         glyphs: []
       });
 
+      let completed = 0;
+      const total = Object.keys(glyphs).length;
+
+      if (total === 0) {
+        alert("No glyphs saved yet!");
+        return;
+      }
+
       for (const char in glyphs) {
         const img = new Image();
         img.src = glyphs[char];
 
-        await new Promise((resolve) => {
-          img.onload = () => {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(img, 0, 0);
+        img.onload = () => {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = canvas.height;
+          const tctx = tempCanvas.getContext('2d');
+          tctx.drawImage(img, 0, 0);
+          const imgData = tctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-            const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            const path = new opentype.Path();
-
-            for (let y = 0; y < tempCanvas.height; y++) {
-              for (let x = 0; x < tempCanvas.width; x++) {
-                const i = (y * tempCanvas.width + x) * 4;
-                const alpha = imgData.data[i + 3];
-                if (alpha > 128) {
-                  path.moveTo(x, 400 - y);
-                  path.lineTo(x + 1, 400 - y);
-                }
+          const path = new opentype.Path();
+          for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+              const i = (y * canvas.width + x) * 4;
+              const alpha = imgData[i + 3];
+              if (alpha > 128) {
+                path.moveTo(x, canvas.height - y);
+                path.lineTo(x + 1, canvas.height - y);
               }
             }
+          }
 
-            const glyph = new opentype.Glyph({
-              name: char,
-              unicode: char.charCodeAt(0),
-              advanceWidth: 600,
-              path: path
-            });
+          const glyph = new opentype.Glyph({
+            name: char,
+            unicode: char.charCodeAt(0),
+            advanceWidth: 600,
+            path: path
+          });
 
-            font.glyphs.push(glyph);
-            resolve();
-          };
-        });
+          font.glyphs.push(glyph);
+          completed++;
+
+          if (completed === total) {
+            const buffer = font.toArrayBuffer();
+            const blob = new Blob([buffer], { type: 'font/ttf' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'CustomFont.ttf';
+            link.click();
+            URL.revokeObjectURL(url);
+          }
+        };
       }
-
-      const buffer = font.toArrayBuffer();
-      const blob = new Blob([buffer], { type: 'font/ttf' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'CustomFont.ttf';
-      link.click();
-      URL.revokeObjectURL(url);
     };
   </script>
 </body>
